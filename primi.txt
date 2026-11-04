@@ -1,0 +1,238 @@
+================================================================================
+CONVERSAZIONE — programma C per i primi n numeri primi
+Data: 2026-11-04
+================================================================================
+
+
+--------------------------------------------------------------------------------
+[UTENTE]
+--------------------------------------------------------------------------------
+Mi puoi creare un programma in c per calcolare i primi n numeri primi, con n
+dato come primo argomento, controlla anche la correttezza del dato in ingresso
+e ottimizza il codice più che puoi, infine verifica che il programma compili
+e poi prova a testarlo.
+
+
+--------------------------------------------------------------------------------
+[CLAUDE] — codice del programma (primi.c)
+--------------------------------------------------------------------------------
+/* primi.c — stampa i primi n numeri primi, uno per riga.
+ *
+ * Compilazione: gcc -O2 -Wall -Wextra -std=c11 -o primi primi.c -lm
+ * Uso:          ./primi <n>
+ *
+ * Algoritmo: Criba di Eratostene solo sui numeri dispari (metà memoria e
+ * metà lavoro), con limite superiore stimato dal teorema dei numeri primi
+ * (per n >= 6: p_n < n * (ln n + ln ln n)), più un margine del 5% e una
+ * rete di sicurezza che raddoppia il limite se non bastasse.
+ */
+
+#include <errno.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_N 10000000LL /* limite massimo accettato per n */
+
+/* Convalida l'input: intero positivo in [1, MAX_N].
+ * Ritorna 1 se valido (con il valore in *out), 0 altrimenti. */
+static int parse_n(const char *s, long long *out)
+{
+    errno = 0;
+    char *end;
+    long long v = strtoll(s, &end, 10);
+
+    if (errno != 0)          /* overflow */
+        return 0;
+    if (end == s || *end)    /* nessun numero o caratteri non numerici */
+        return 0;
+    if (v < 1 || v > MAX_N)  /* fuori intervallo */
+        return 0;
+
+    *out = v;
+    return 1;
+}
+
+/* Limite superiore sicuro per l'n-esimo primo. */
+static size_t upper_bound(long long n)
+{
+    if (n < 6)
+        return 16; /* p_5 = 11 */
+    double dn = (double)n;
+    return (size_t)(1.05 * dn * (log(dn) + log(log(dn)))) + 16;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc != 2) {
+        fprintf(stderr, "Uso: %s <n>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    long long n;
+    if (!parse_n(argv[1], &n)) {
+        fprintf(stderr,
+                "Errore: input non valido '%s' "
+                "(atteso un intero positivo da 1 a %lld)\n",
+                argv[1], MAX_N);
+        return EXIT_FAILURE;
+    }
+
+    size_t bound = upper_bound(n);
+    uint8_t *comp = NULL;
+
+    /* Criba: l'indice i corrisponde al dispari 2*i + 3 (l'1 e il 2
+     * sono gestiti a parte). Si ripete solo se il limite non bastasse. */
+    for (;;) {
+        size_t count = (bound - 1) / 2; /* numero di dispari in [3, bound] */
+
+        comp = realloc(comp, count);
+        if (!comp) {
+            fprintf(stderr, "Errore: memoria insufficiente\n");
+            return EXIT_FAILURE;
+        }
+        memset(comp, 0, count);
+
+        for (size_t i = 0;; i++) {
+            size_t p = 2 * i + 3;
+            if (p > bound / p) /* p*p > bound: la cribra è completa */
+                break;
+            if (comp[i])
+                continue; /* p già composto */
+            /* Segna i multipli di p a partire da p^2, step 2p
+             * (= p indici nello spazio dei soli dispari). */
+            for (size_t j = (p * p - 3) / 2; j < count; j += p)
+                comp[j] = 1;
+        }
+
+        size_t total = 1; /* il 2 */
+        for (size_t i = 0; i < count; i++)
+            total += !comp[i];
+
+        if (total >= (size_t)n)
+            break; /* limite sufficiente (il margine del 5% basta sempre) */
+
+        if (bound > SIZE_MAX / 2) {
+            fprintf(stderr, "Errore interno: limite di cribra troppo grande\n");
+            return EXIT_FAILURE;
+        }
+        bound *= 2; /* rete di sicurezza: raddoppia e ricriba */
+    }
+
+    /* Stampa: il 2 e i dispari non segnati come composti. */
+    size_t printed = 1;
+    printf("2\n");
+    for (size_t i = 0; printed < (size_t)n; i++) {
+        if (!comp[i]) {
+            printf("%zu\n", 2 * i + 3);
+            printed++;
+        }
+    }
+
+    free(comp);
+    return EXIT_SUCCESS;
+}
+
+
+--------------------------------------------------------------------------------
+[CLAUDE] — compilazione
+--------------------------------------------------------------------------------
+Comando: gcc -O2 -Wall -Wextra -std=c11 -o primi primi.c -lm
+Output:
+    === COMPILAZIONE OK ===
+Risultato: compila senza warning.
+
+
+--------------------------------------------------------------------------------
+[CLAUDE] — test: validazione input (casi invalidi)
+--------------------------------------------------------------------------------
+Comandi eseguiti:
+    ./primi              # nessun argomento
+    ./primi 0
+    ./primi -3
+    ./primi abc
+    ./primi 3.5
+    ./primi "  "
+    ./primi 2147483648
+    ./primi 99999999999999999999
+    ./primi 10000001
+    ./primi 5x
+
+Output (tutti con exit=1):
+    Uso: ./primi <n>                                                    (exit=1)
+    Errore: input non valido '' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido '0' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido '-3' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido 'abc' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido '3.5' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido '  ' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido '2147483648' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido '99999999999999999999' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido '10000001' (atteso un intero positivo da 1 a 10000000)
+    Errore: input non valido '5x' (atteso un intero positivo da 1 a 10000000)
+    (tutti con exit=1)
+
+
+--------------------------------------------------------------------------------
+[CLAUDE] — test: casi validi piccoli
+--------------------------------------------------------------------------------
+Comandi eseguiti:
+    ./primi 1
+    ./primi 10
+    ./primi 100 | tail -1
+    ./primi 1000 | tail -1
+
+Output:
+    n=1   -> 2
+    n=10  -> 2 3 5 7 11 13 17 19 23 29
+    n=100 (ultimo)  -> 541
+    n=1000 (ultimo) -> 7919
+
+
+--------------------------------------------------------------------------------
+[CLAUDE] — verifica incrociata con implementazione indipendente (Python)
+--------------------------------------------------------------------------------
+Comandi eseguiti:
+    ./primi 1000   > /tmp/primi_1000.txt
+    ./primi 100000 > /tmp/primi_100000.txt
+    (confronto con una cribra Python indipendente su tutti i numeri)
+
+Output:
+    n=1000:    conteggio=1000,    ultimo=7919    -> OK - coincidenza completa
+    n=100000:  conteggio=100000,  ultimo=1299709 -> OK - coincidenza completa
+
+
+--------------------------------------------------------------------------------
+[CLAUDE] — test di prestazioni con n grandi
+--------------------------------------------------------------------------------
+Comandi eseguiti:
+    time ./primi 1000000  | tail -1
+    time ./primi 10000000 | tail -1
+
+Output:
+    === n=1.000.000 ===
+    15485863
+    real 0m0,162s   user 0m0,163s   sys 0m0,013s
+
+    === n=10.000.000 (limite massimo) ===
+    179424673
+    real 0m2,143s   user 0m2,162s   sys 0m0,110s
+
+
+--------------------------------------------------------------------------------
+[CLAUDE] — riepilogo finale
+--------------------------------------------------------------------------------
+- Compilazione: gcc -O2 -Wall -Wextra -std=c11 senza warning.
+- Algoritmo: Criba di Eratostene ottimizzata (solo dispari, marcatura da p^2,
+  limite stimato col teorema dei numeri primi, margine 5% + rete di sicurezza).
+- Validazione input: rifiuta argomenti mancanti/extra, non numerici, spazi,
+  zero, negativi, overflow e n fuori da [1, 10.000.000]; exit=1 su errore.
+- Test: tutti superati.
+    * 100° primo = 541, 1000° = 7919, 100.000° = 1.299.709 (valori noti corretti)
+    * Confronto completo con cribra Python indipendente per n=1000 e n=100000:
+      coincidenza su tutti i numeri.
+    * n=1.000.000 -> ultimo 15.485.863 (valore noto) in 0,16 s
+    * n=10.000.000 -> ultimo 179.424.673 (valore noto) in 2,1 s
+- Uso: ./primi <n>  (stampa i primi n numeri primi, uno per riga)
